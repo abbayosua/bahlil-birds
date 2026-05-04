@@ -3,19 +3,28 @@ session_start();
 
 const ADMIN_USER = 'admin';
 const ADMIN_PASS = 'bahlil';
-
 const BOT_TOKEN = '8790094820:AAG0gWoRouQmkwY66fFTRpON8WMYkuys_ms';
 
-define('DB_HOST', 'localhost');
-define('DB_USER', 'root');
-define('DB_PASS', '');
-define('DB_NAME', 'flappybird');
+function getDbConfig(): array {
+    static $cfg = null;
+    if ($cfg === null) {
+        $path = __DIR__ . '/../config/db.php';
+        if (file_exists($path)) {
+            $cfg = require $path;
+        } else {
+            $path = __DIR__ . '/../config/db.default.php';
+            $cfg = file_exists($path) ? require $path : ['host' => 'localhost', 'dbname' => 'flappybird', 'user' => 'root', 'pass' => ''];
+        }
+    }
+    return $cfg;
+}
 
 function getDb($dbName = null) {
     try {
+        $c = getDbConfig();
         return new PDO(
-            'mysql:host=' . DB_HOST . ($dbName ? ';dbname=' . $dbName : '') . ';charset=utf8mb4',
-            DB_USER, DB_PASS,
+            'mysql:host=' . $c['host'] . ($dbName ? ';dbname=' . $dbName : '') . ';charset=utf8mb4',
+            $c['user'], $c['pass'],
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]
         );
     } catch (PDOException $e) {
@@ -24,31 +33,31 @@ function getDb($dbName = null) {
 }
 
 function testDb() {
+    $c = getDbConfig();
     $pdo = getDb();
-    if (!$pdo) return ['ok' => false, 'error' => 'Cannot connect to MySQL at ' . DB_HOST];
+    if (!$pdo) return ['ok' => false, 'error' => 'Cannot connect to MySQL at ' . $c['host'], 'step' => 'connection'];
     try {
-        $pdo->query('USE ' . DB_NAME);
+        $pdo->query('USE ' . $c['dbname']);
         $pdo->query('SELECT 1 FROM rewards LIMIT 1');
-        return ['ok' => true, 'message' => 'Connected to ' . DB_NAME . ', tables exist'];
+        return ['ok' => true, 'message' => 'Connected to ' . $c['dbname'] . ', tables exist'];
     } catch (PDOException $e) {
         $code = (string)$e->getCode();
-        if ($code == '1049') return ['ok' => false, 'error' => "Database '" . DB_NAME . "' does not exist", 'step' => 'db'];
+        if ($code == '1049') return ['ok' => false, 'error' => "Database '" . $c['dbname'] . "' does not exist", 'step' => 'db'];
         if ($code == '42S02') return ['ok' => false, 'error' => 'Database exists but tables are missing', 'step' => 'tables'];
         return ['ok' => false, 'error' => $e->getMessage()];
     }
 }
 
 function runMigration() {
+    $c = getDbConfig();
     $pdo = getDb();
     if (!$pdo) return ['ok' => false, 'error' => 'Cannot connect to MySQL'];
     try {
-        $pdo->query('CREATE DATABASE IF NOT EXISTS `' . DB_NAME . '` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
-        $pdo->query('USE `' . DB_NAME . '`');
+        $pdo->query('CREATE DATABASE IF NOT EXISTS `' . $c['dbname'] . '` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+        $pdo->query('USE `' . $c['dbname'] . '`');
         $sql = file_get_contents(__DIR__ . '/../sql/schema.sql');
         $statements = array_filter(array_map('trim', explode(';', $sql)));
-        foreach ($statements as $stmt) {
-            if (!empty($stmt)) $pdo->exec($stmt);
-        }
+        foreach ($statements as $stmt) { if (!empty($stmt)) $pdo->exec($stmt); }
         return ['ok' => true, 'message' => 'Migration completed successfully'];
     } catch (PDOException $e) {
         return ['ok' => false, 'error' => 'Migration failed: ' . $e->getMessage()];
@@ -110,6 +119,22 @@ function handleAction($action) {
             return ['ok' => true, 'db' => $dbStatus, 'webhook' => $whStatus];
         case 'migrate':
             return runMigration();
+        case 'save_config':
+            $host = $_POST['db_host'] ?? 'localhost';
+            $dbname = $_POST['db_name'] ?? 'flappybird';
+            $user = $_POST['db_user'] ?? 'root';
+            $pass = $_POST['db_pass'] ?? '';
+            $content = '<?php' . "\nreturn [\n"
+                . "    'host' => " . var_export($host, true) . ",\n"
+                . "    'dbname' => " . var_export($dbname, true) . ",\n"
+                . "    'user' => " . var_export($user, true) . ",\n"
+                . "    'pass' => " . var_export($pass, true) . ",\n"
+                . "];\n";
+            $path = __DIR__ . '/../config/db.php';
+            if (@file_put_contents($path, $content) === false) {
+                return ['ok' => false, 'error' => 'Cannot write config file at config/db.php'];
+            }
+            return ['ok' => true, 'message' => 'Configuration saved'];
         case 'set_webhook':
             $wh = $_POST['webhook_url'] ?? '';
             if (empty($wh)) return ['ok' => false, 'error' => 'Webhook URL required'];

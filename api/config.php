@@ -9,13 +9,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+function getDBConfig(): array {
+    static $cfg = null;
+    if ($cfg === null) {
+        $path = __DIR__ . '/../config/db.php';
+        if (file_exists($path)) {
+            $cfg = require $path;
+        } else {
+            $path = __DIR__ . '/../config/db.default.php';
+            $cfg = file_exists($path) ? require $path : ['host' => 'localhost', 'dbname' => 'flappybird', 'user' => 'root', 'pass' => ''];
+        }
+    }
+    return $cfg;
+}
+
 function getDB(): PDO {
     static $db = null;
     if ($db === null) {
+        $c = getDBConfig();
         $db = new PDO(
-            'mysql:host=localhost;dbname=flappybird;charset=utf8mb4',
-            'root',
-            '',
+            'mysql:host=' . $c['host'] . ';dbname=' . $c['dbname'] . ';charset=utf8mb4',
+            $c['user'],
+            $c['pass'],
             [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,

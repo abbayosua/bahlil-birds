@@ -1,43 +1,68 @@
 <?php
 session_start();
-
 const ADMIN_USER = 'admin';
 const ADMIN_PASS = 'bahlil';
 const BOT_TOKEN = '8790094820:AAG0gWoRouQmkwY66fFTRpON8WMYkuys_ms';
-define('DB_HOST', 'localhost');
-define('DB_USER', 'root');
-define('DB_PASS', '');
-define('DB_NAME', 'flappybird');
+
+function getDbConfig(): array {
+    static $cfg = null;
+    if ($cfg === null) {
+        $path = __DIR__ . '/../config/db.php';
+        if (file_exists($path)) { $cfg = require $path; }
+        else {
+            $path = __DIR__ . '/../config/db.default.php';
+            $cfg = file_exists($path) ? require $path : ['host' => 'localhost', 'dbname' => 'flappybird', 'user' => 'root', 'pass' => ''];
+        }
+    }
+    return $cfg;
+}
 
 function getDb($dbName = null) {
     try {
-        return new PDO('mysql:host=' . DB_HOST . ($dbName ? ';dbname=' . $dbName : '') . ';charset=utf8mb4',
-            DB_USER, DB_PASS,
+        $c = getDbConfig();
+        return new PDO('mysql:host=' . $c['host'] . ($dbName ? ';dbname=' . $dbName : '') . ';charset=utf8mb4',
+            $c['user'], $c['pass'],
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
     } catch (PDOException $e) { return null; }
 }
 
 function testDb() {
+    $c = getDbConfig();
     $pdo = getDb();
-    if (!$pdo) return ['ok' => false, 'error' => 'Cannot connect to MySQL at ' . DB_HOST, 'step' => 'connection'];
+    if (!$pdo) return ['ok' => false, 'error' => 'Cannot connect to MySQL at ' . $c['host'], 'step' => 'connection'];
     try {
-        $pdo->query('USE ' . DB_NAME);
+        $pdo->query('USE ' . $c['dbname']);
         $pdo->query('SELECT 1 FROM rewards LIMIT 1');
-        return ['ok' => true, 'message' => 'Connected to ' . DB_NAME . ', tables exist'];
+        return ['ok' => true, 'message' => 'Connected to ' . $c['dbname'] . ', tables exist'];
     } catch (PDOException $e) {
         $code = (string)$e->getCode();
-        if ($code == '1049') return ['ok' => false, 'error' => "Database '" . DB_NAME . "' does not exist", 'step' => 'db'];
+        if ($code == '1049') return ['ok' => false, 'error' => "Database '" . $c['dbname'] . "' does not exist", 'step' => 'db'];
         if ($code == '42S02') return ['ok' => false, 'error' => 'Database exists but tables are missing', 'step' => 'tables'];
         return ['ok' => false, 'error' => $e->getMessage()];
     }
 }
 
+function saveConfig($host, $dbname, $user, $pass) {
+    $content = '<?php' . "\nreturn [\n"
+        . "    'host' => " . var_export($host, true) . ",\n"
+        . "    'dbname' => " . var_export($dbname, true) . ",\n"
+        . "    'user' => " . var_export($user, true) . ",\n"
+        . "    'pass' => " . var_export($pass, true) . ",\n"
+        . "];\n";
+    $path = __DIR__ . '/../config/db.php';
+    if (@file_put_contents($path, $content) === false) {
+        return ['ok' => false, 'error' => 'Cannot write config file at config/db.php. Check permissions.'];
+    }
+    return ['ok' => true, 'message' => 'Configuration saved'];
+}
+
 function runMigration() {
+    $c = getDbConfig();
     $pdo = getDb();
     if (!$pdo) return ['ok' => false, 'error' => 'Cannot connect to MySQL'];
     try {
-        $pdo->query('CREATE DATABASE IF NOT EXISTS `' . DB_NAME . '` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
-        $pdo->query('USE `' . DB_NAME . '`');
+        $pdo->query('CREATE DATABASE IF NOT EXISTS `' . $c['dbname'] . '` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+        $pdo->query('USE `' . $c['dbname'] . '`');
         $sql = file_get_contents(__DIR__ . '/../sql/schema.sql');
         $statements = array_filter(array_map('trim', explode(';', $sql)));
         foreach ($statements as $stmt) { if (!empty($stmt)) $pdo->exec($stmt); }
@@ -82,11 +107,27 @@ if (!($_SESSION['admin_logged_in'] ?? false)) {
 $action = $_POST['action'] ?? '';
 if ($action) {
     header('Content-Type: application/json');
-    $dbStatus = testDb();
     switch ($action) {
         case 'step_status':
+            $dbStatus = testDb();
             $whStatus = checkWebhook();
-            echo json_encode(['ok' => true, 'db' => $dbStatus, 'webhook' => $whStatus]);
+            $configExists = file_exists(__DIR__ . '/../config/db.php');
+            echo json_encode(['ok' => true, 'config_exists' => $configExists, 'db' => $dbStatus, 'webhook' => $whStatus]);
+            exit;
+        case 'save_config':
+            echo json_encode(saveConfig($_POST['db_host'] ?? 'localhost', $_POST['db_name'] ?? 'flappybird', $_POST['db_user'] ?? 'root', $_POST['db_pass'] ?? ''));
+            exit;
+        case 'test_connection':
+            $c = $_POST;
+            $pdo = null;
+            try {
+                $pdo = new PDO('mysql:host=' . ($c['db_host'] ?? 'localhost') . ';charset=utf8mb4',
+                    $c['db_user'] ?? 'root', $c['db_pass'] ?? '',
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 3]);
+                echo json_encode(['ok' => true, 'message' => 'Connection successful']);
+            } catch (PDOException $e) {
+                echo json_encode(['ok' => false, 'error' => 'Connection failed: ' . $e->getMessage()]);
+            }
             exit;
         case 'migrate':
             echo json_encode(runMigration());
@@ -124,11 +165,15 @@ if ($action) {
     .step-box .status.ok { background: rgba(46,204,113,0.15); border: 1px solid #2ecc71; color: #2ecc71; }
     .step-box .status.fail { background: rgba(231,76,60,0.15); border: 1px solid #e74c3c; color: #ff6b81; }
     .step-box .status.info { background: rgba(77,201,246,0.1); border: 1px solid #4dc9f6; color: #4dc9f6; }
-    .step-box input[type="url"] { width: 100%; padding: 10px 14px; border: 2px solid #0f3460; border-radius: 8px; background: #1a1a2e; color: #fff; font-size: 0.95em; outline: none; margin-bottom: 12px; }
-    .step-box input[type="url"]:focus { border-color: #4dc9f6; }
-    .step-box button { padding: 10px 24px; border: none; border-radius: 8px; background: #e94560; color: #fff; font-size: 1em; font-weight: 600; cursor: pointer; }
+    .form-grid { display: grid; gap: 12px; margin-bottom: 16px; }
+    .form-grid label { color: #aaa; font-size: 0.85em; display: block; margin-bottom: 4px; }
+    .form-grid input { width: 100%; padding: 10px 14px; border: 2px solid #0f3460; border-radius: 8px; background: #1a1a2e; color: #fff; font-size: 0.95em; outline: none; }
+    .form-grid input:focus { border-color: #4dc9f6; }
+    .step-box button { padding: 10px 24px; border: none; border-radius: 8px; background: #e94560; color: #fff; font-size: 1em; font-weight: 600; cursor: pointer; margin-right: 8px; margin-bottom: 8px; }
     .step-box button:hover { background: #ff6b81; }
     .step-box button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .step-box button.secondary { background: #0f3460; }
+    .step-box button.secondary:hover { background: #16213e; }
     .step-box .msg { margin-top: 12px; font-size: 0.9em; }
     .step-box .msg.ok { color: #2ecc71; }
     .step-box .msg.err { color: #ff6b81; }
@@ -145,40 +190,58 @@ if ($action) {
 <body>
 <div class="admin-wrap wizard">
     <h1>🚀 Setup Wizard</h1>
-    <p>Let's get your Bahlil Birds app ready</p>
+    <p>Configure your database and Telegram bot</p>
 
     <div class="progress">
-        <div class="step" id="prog-1">1. Database</div>
-        <div class="step" id="prog-2">2. Webhook</div>
-        <div class="step" id="prog-3">3. Done</div>
+        <div class="step" id="prog-1">1. Credentials</div>
+        <div class="step" id="prog-2">2. Migration</div>
+        <div class="step" id="prog-3">3. Webhook</div>
+        <div class="step" id="prog-4">4. Done</div>
     </div>
 
-    <div class="wizard-step active" id="step-1">
+    <div class="wizard-step" id="step-1">
         <div class="step-box">
-            <h2>Step 1: Database</h2>
-            <p>Set up the MySQL database. This creates the <code>flappybird</code> database and all required tables.</p>
-            <div id="db-status" class="status"><p class="loading">Checking...</p></div>
-            <button id="btn-migrate" onclick="runMigrate()">Create Database &amp; Tables</button>
-            <p id="db-msg" class="msg"></p>
+            <h2>Step 1: Database Credentials</h2>
+            <p>Enter your MySQL database connection details. These will be saved to <code>config/db.php</code>.</p>
+            <div class="form-grid">
+                <div><label>Host</label><input type="text" id="db-host" value="localhost" placeholder="localhost"></div>
+                <div><label>Database Name</label><input type="text" id="db-name" value="flappybird" placeholder="flappybird"></div>
+                <div><label>Username</label><input type="text" id="db-user" value="root" placeholder="root"></div>
+                <div><label>Password</label><input type="password" id="db-pass" value="" placeholder="(leave empty if none)"></div>
+            </div>
+            <button onclick="testConnection()">🔌 Test Connection</button>
+            <button id="btn-save-config" onclick="saveConfig()" disabled>💾 Save & Continue</button>
+            <p id="db-cred-msg" class="msg"></p>
         </div>
     </div>
 
     <div class="wizard-step" id="step-2">
         <div class="step-box">
-            <h2>Step 2: Telegram Webhook</h2>
-            <p>Register the Telegram bot webhook so the bot can receive messages from players.</p>
-            <p>Use your domain URL + <code>/bikinweb/flappybird/api/telegram.php</code></p>
-            <div id="wh-status" class="status"><p class="loading">Checking...</p></div>
-            <input type="url" id="webhook-url" placeholder="https://yourdomain.com/bikinweb/flappybird/api/telegram.php">
-            <button onclick="registerWebhook()">Register Webhook</button>
-            <p id="wh-msg" class="msg"></p>
+            <h2>Step 2: Database Migration</h2>
+            <p>Creates the database tables (<code>users</code>, <code>scores</code>, <code>rewards</code>).</p>
+            <div id="migrate-status" class="status"><p class="loading">Checking...</p></div>
+            <button id="btn-migrate" onclick="runMigrate()">Run Migration</button>
+            <p id="migrate-msg" class="msg"></p>
+            <button class="secondary" onclick="goBack(1)">← Back to Credentials</button>
         </div>
     </div>
 
     <div class="wizard-step" id="step-3">
+        <div class="step-box">
+            <h2>Step 3: Telegram Webhook</h2>
+            <p>Register the Telegram bot webhook so the bot can receive messages.</p>
+            <div id="wh-status" class="status"><p class="loading">Checking...</p></div>
+            <input type="url" id="webhook-url" placeholder="https://yourdomain.com/bikinweb/flappybird/api/telegram.php" style="width:100%;padding:10px 14px;border:2px solid #0f3460;border-radius:8px;background:#1a1a2e;color:#fff;font-size:0.95em;outline:none;margin-bottom:12px;">
+            <button onclick="registerWebhook()">Register Webhook</button>
+            <p id="wh-msg" class="msg"></p>
+            <button class="secondary" onclick="goBack(2)">← Back to Migration</button>
+        </div>
+    </div>
+
+    <div class="wizard-step" id="step-4">
         <div class="step-box wizard-done">
             <h2>✅ All Done!</h2>
-            <p>Everything is set up and ready to go.</p>
+            <p>Bahlil Birds is fully set up and ready to go.</p>
             <div class="links">
                 <a href="../" class="game">🎮 Play Game</a>
                 <a href="index.php" class="admin">🔧 Admin Panel</a>
@@ -195,11 +258,14 @@ function api(action, body) {
     return fetch('?', { method: 'POST', body: fd }).then(r => r.json());
 }
 
+let currentStep = 1;
+
 function goToStep(n) {
+    currentStep = n;
     document.querySelectorAll('.wizard-step').forEach(s => s.classList.remove('active'));
     document.getElementById('step-' + n).classList.add('active');
     document.querySelectorAll('.progress .step').forEach(s => s.classList.remove('active'));
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= 4; i++) {
         const el = document.getElementById('prog-' + i);
         el.classList.remove('active', 'done');
         if (i < n) el.classList.add('done');
@@ -207,38 +273,80 @@ function goToStep(n) {
     }
 }
 
+function goBack(n) { goToStep(n); }
+
 async function checkStatus() {
     const d = await api('step_status');
-    if (d.db.ok) {
-        document.getElementById('db-status').innerHTML = '<p>✅ Database ready</p>';
-        document.getElementById('btn-migrate').disabled = true;
-        document.getElementById('btn-migrate').textContent = '✅ Database Ready';
-        step1Done();
-    } else {
-        document.getElementById('db-status').innerHTML = '<p>❌ ' + d.db.error + '</p>';
+
+    if (!d.config_exists) {
+        goToStep(1);
+        document.getElementById('db-cred-msg').className = 'msg';
+        document.getElementById('db-cred-msg').textContent = '';
+        return;
     }
+
+    if (!d.db.ok) {
+        goToStep(2);
+        if (d.db.step === 'connection') {
+            document.getElementById('migrate-status').innerHTML = '<p>❌ Cannot connect — check credentials in Step 1</p>';
+        } else if (d.db.step === 'db') {
+            document.getElementById('migrate-status').innerHTML = '<p class="info">Database does not exist yet — click "Run Migration" to create it.</p>';
+            document.getElementById('btn-migrate').disabled = false;
+        } else if (d.db.step === 'tables') {
+            document.getElementById('migrate-status').innerHTML = '<p class="info">Database exists but tables are missing — click "Run Migration".</p>';
+            document.getElementById('btn-migrate').disabled = false;
+        } else {
+            document.getElementById('migrate-status').innerHTML = '<p>❌ ' + d.db.error + '</p>';
+        }
+        return;
+    }
+
+    // DB ready, check webhook
+    document.getElementById('prog-2').classList.add('done');
     if (d.webhook.ok && d.webhook.is_set) {
-        document.getElementById('wh-status').innerHTML = '<p>✅ Webhook active: <code>' + d.webhook.url + '</code></p>';
-        document.getElementById('webhook-url').value = d.webhook.url;
-        document.getElementById('webhook-url').disabled = true;
-        step2Done();
+        goToStep(4);
     } else if (d.webhook.ok) {
-        document.getElementById('wh-status').innerHTML = '<p>⚠️ Webhook not set yet — enter your URL below</p>';
+        goToStep(3);
+        document.getElementById('wh-status').innerHTML = '<p class="info">Webhook not set yet — enter your URL below.</p>';
     } else {
-        document.getElementById('wh-status').innerHTML = '<p>❌ ' + d.webhook.error + '</p>';
+        goToStep(3);
+        document.getElementById('wh-status').innerHTML = '<p class="info">' + d.webhook.error + '</p>';
     }
 }
 
-function step1Done() {
-    if (document.getElementById('step-1').classList.contains('active')) {
+async function testConnection() {
+    const host = document.getElementById('db-host').value;
+    const dbname = document.getElementById('db-name').value;
+    const user = document.getElementById('db-user').value;
+    const pass = document.getElementById('db-pass').value;
+    const d = await api('test_connection', { db_host: host, db_name: dbname, db_user: user, db_pass: pass });
+    const el = document.getElementById('db-cred-msg');
+    if (d.ok) {
+        el.className = 'msg ok';
+        el.textContent = '✅ ' + d.message;
+        document.getElementById('btn-save-config').disabled = false;
+    } else {
+        el.className = 'msg err';
+        el.textContent = '❌ ' + d.error;
+        document.getElementById('btn-save-config').disabled = true;
+    }
+}
+
+async function saveConfig() {
+    const host = document.getElementById('db-host').value;
+    const dbname = document.getElementById('db-name').value;
+    const user = document.getElementById('db-user').value;
+    const pass = document.getElementById('db-pass').value;
+    const d = await api('save_config', { db_host: host, db_name: dbname, db_user: user, db_pass: pass });
+    const el = document.getElementById('db-cred-msg');
+    if (d.ok) {
+        el.className = 'msg ok';
+        el.textContent = '✅ ' + d.message;
         goToStep(2);
         checkStatus();
-    }
-}
-
-function step2Done() {
-    if (document.getElementById('step-2').classList.contains('active')) {
-        goToStep(3);
+    } else {
+        el.className = 'msg err';
+        el.textContent = '❌ ' + d.error;
     }
 }
 
@@ -247,12 +355,14 @@ async function runMigrate() {
     btn.disabled = true;
     btn.textContent = 'Running...';
     const d = await api('migrate');
-    const el = document.getElementById('db-msg');
+    const el = document.getElementById('migrate-msg');
     if (d.ok) {
         el.className = 'msg ok';
         el.textContent = '✅ ' + d.message;
-        btn.textContent = '✅ Database Ready';
-        step1Done();
+        document.getElementById('migrate-status').innerHTML = '<p>✅ Database is ready!</p>';
+        btn.textContent = 'Done';
+        goToStep(3);
+        checkStatus();
     } else {
         el.className = 'msg err';
         el.textContent = '❌ ' + d.error;
@@ -269,8 +379,8 @@ async function registerWebhook() {
     if (d.ok) {
         el.className = 'msg ok';
         el.textContent = '✅ ' + d.message;
-        document.getElementById('webhook-url').disabled = true;
-        step2Done();
+        document.getElementById('wh-status').innerHTML = '<p>✅ Webhook active!</p>';
+        goToStep(4);
     } else {
         el.className = 'msg err';
         el.textContent = '❌ ' + d.error;
