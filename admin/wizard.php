@@ -65,7 +65,12 @@ function runMigration() {
         $pdo->query('USE `' . $c['dbname'] . '`');
         $sql = file_get_contents(__DIR__ . '/../sql/schema.sql');
         $statements = array_filter(array_map('trim', explode(';', $sql)));
-        foreach ($statements as $stmt) { if (!empty($stmt)) $pdo->exec($stmt); }
+        foreach ($statements as $stmt) {
+            $s = strtoupper(substr(ltrim($stmt), 0, 15));
+            if (!empty($stmt) && !str_starts_with($s, 'CREATE DATABASE') && !str_starts_with($s, 'USE ')) {
+                $pdo->exec($stmt);
+            }
+        }
         return ['ok' => true, 'message' => 'Migration completed successfully'];
     } catch (PDOException $e) { return ['ok' => false, 'error' => 'Migration failed: ' . $e->getMessage()]; }
 }
