@@ -1,0 +1,14 @@
+{
+  "name": "flappybird",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "db:init": "mysql -u root < sql/schema.sql",
+    "webhook:set": "php scripts/set-webhook.php"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0"
+  }
+}

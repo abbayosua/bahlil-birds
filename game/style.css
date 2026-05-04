@@ -1,0 +1,183 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    flex-direction: column;
+}
+
+canvas {
+    border: 3px solid #16213e;
+    border-radius: 8px;
+    box-shadow: 0 0 40px rgba(0, 150, 255, 0.15);
+    background: linear-gradient(180deg, #4dc9f6 0%, #87ceeb 100%);
+    image-rendering: pixelated;
+}
+
+#login-screen, #game-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 10;
+}
+
+.card {
+    background: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 16px;
+    padding: 32px 40px;
+    text-align: center;
+    color: #fff;
+    min-width: 300px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.card h1 {
+    font-size: 2em;
+    margin-bottom: 4px;
+    color: #e94560;
+}
+
+.card h2 {
+    font-size: 1.6em;
+    margin-bottom: 12px;
+    color: #e94560;
+}
+
+.splash-logo {
+    width: 200px;
+    height: auto;
+    display: block;
+    margin: 0 auto 12px;
+    border-radius: 8px;
+}
+
+.subtitle {
+    color: #aaa;
+    font-size: 0.9em;
+    margin-bottom: 20px;
+}
+
+.card input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #0f3460;
+    border-radius: 8px;
+    background: #1a1a2e;
+    color: #fff;
+    font-size: 1em;
+    outline: none;
+    text-align: center;
+    margin-bottom: 16px;
+    transition: border-color 0.2s;
+}
+
+.card input:focus {
+    border-color: #e94560;
+}
+
+.card button {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: #e94560;
+    color: #fff;
+    font-size: 1.1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    margin-bottom: 8px;
+}
+
+.card button:hover {
+    background: #ff6b81;
+}
+
+.card button:active {
+    transform: scale(0.97);
+}
+
+.card p {
+    margin-top: 4px;
+}
+
+#overlay-score {
+    font-size: 1.4em;
+    font-weight: bold;
+    color: #ffd700;
+}
+
+#overlay-coins {
+    font-size: 1.1em;
+    color: #4dc9f6;
+}
+
+#overlay-total {
+    font-size: 0.95em;
+    color: #aaa;
+    margin-bottom: 16px;
+}
+
+.msg {
+    color: #ff6b81;
+    font-size: 0.85em;
+    min-height: 20px;
+}
+
+.tip {
+    color: #666;
+    font-size: 0.75em;
+    margin-top: 12px;
+}
+
+.telegram-banner {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #0f3460;
+}
+
+.telegram-banner p {
+    color: #888;
+    font-size: 0.8em;
+    margin-bottom: 8px;
+}
+
+.telegram-btn {
+    display: inline-block;
+    padding: 8px 20px;
+    border: none;
+    border-radius: 8px;
+    background: #0088cc;
+    color: #fff !important;
+    font-size: 0.9em;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.telegram-btn:hover {
+    background: #00a8eb;
+    text-decoration: none;
+}
+
+.telegram-btn:active {
+    transform: scale(0.97);
+}
+
+#game-overlay {
+    display: none;
+}

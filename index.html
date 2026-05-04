@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bahlil Birds</title>
+    <link rel="stylesheet" href="game/style.css">
+</head>
+<body>
+    <div id="login-screen">
+        <div class="card">
+            <img src="game/assets/bahlil-logo.png" alt="Bahlil Birds" class="splash-logo">
+            <h1>Bahlil Birds</h1>
+            <p class="subtitle">Enter your username to play</p>
+            <input type="text" id="username-input" placeholder="Username" maxlength="50" autocomplete="off">
+            <button id="start-btn">Play</button>
+            <p id="login-msg" class="msg"></p>
+            <div class="telegram-banner">
+                <p>Claim rewards on Telegram:</p>
+                <a href="https://t.me/flappy1212_bot" target="_blank" class="telegram-btn">@flappy1212_bot</a>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="game-canvas" width="480" height="640" style="display:none"></canvas>
+
+    <div id="game-overlay" style="display:none">
+        <div class="card">
+            <h2 id="overlay-title">Game Over</h2>
+            <p id="overlay-score">Score: 0</p>
+            <p id="overlay-coins">Coins earned: 0</p>
+            <p id="overlay-total">Total coins: 0</p>
+            <button id="restart-btn">Play Again</button>
+            <a id="telegram-claim-link" href="https://t.me/flappy1212_bot" target="_blank" class="telegram-btn">Claim on @flappy1212_bot</a>
+        </div>
+    </div>
+
+    <script src="game/game.js"></script>
+</body>
+</html>
