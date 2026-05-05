@@ -17,6 +17,14 @@ switch ($action) {
             $stmt = $db->prepare('SELECT id, username, telegram_id, created_at FROM users WHERE username = ?');
             $stmt->execute([$username]);
             $user = $stmt->fetch();
+
+            $rCheck = $db->prepare('SELECT id FROM rewards WHERE user_id = ?');
+            $rCheck->execute([$user['id']]);
+            if ($rCheck->rowCount() === 0) {
+                $db->prepare('INSERT INTO rewards (user_id, claimed_coins, pending_coins) VALUES (?, 0, 0)')
+                    ->execute([$user['id']]);
+            }
+
             jsonResponse(['user' => $user, 'exists' => true]);
         }
         $userId = $db->lastInsertId();
