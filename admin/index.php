@@ -98,6 +98,21 @@ function setWebhook($webhookUrl) {
     return $data['ok'] ?? false ? ['ok' => true, 'message' => 'Webhook set to: ' . $webhookUrl] : ['ok' => false, 'error' => $data['description'] ?? 'Unknown error'];
 }
 
+function testTelegramConnection(): array {
+    $ch = curl_init('https://api.telegram.org/bot' . BOT_TOKEN . '/getMe');
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8]);
+    $r = curl_exec($ch);
+    $errno = curl_errno($ch);
+    $error = curl_error($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($errno) return ['ok' => false, 'error' => "cURL error ($errno): $error. Your hosting may block outbound connections to Telegram."];
+    if ($httpCode !== 200) return ['ok' => false, 'error' => "Telegram API returned HTTP $httpCode. Check your bot token."];
+    $data = json_decode($r, true);
+    $botName = $data['result']['username'] ?? 'unknown';
+    return ['ok' => true, 'message' => "Connected to @$botName ✅"];
+}
+
 function isLoggedIn() {
     return ($_SESSION['admin_logged_in'] ?? false) === true;
 }
@@ -121,7 +136,8 @@ function handleAction($action) {
         case 'status':
             $dbStatus = testDb();
             $whStatus = checkWebhook();
-            return ['ok' => true, 'db' => $dbStatus, 'webhook' => $whStatus];
+            $tgStatus = testTelegramConnection();
+            return ['ok' => true, 'db' => $dbStatus, 'webhook' => $whStatus, 'telegram' => $tgStatus];
         case 'migrate':
             return runMigration();
         case 'save_config':
@@ -245,11 +261,18 @@ if (isLoggedIn() && !testDb()['ok']) {
     function statusHtml(d) {
         const db = d.db;
         const wh = d.webhook;
+        const tg = d.telegram;
         let html = '';
         html += '<div class="status-card ' + (db.ok ? 'ok' : 'fail') + '">';
         html += '<h3>Database</h3>';
         if (db.ok) html += '<p>✅ ' + db.message + '</p>';
         else html += '<p>❌ ' + db.error + '</p>';
+        html += '</div>';
+
+        html += '<div class="status-card ' + (tg.ok ? 'ok' : 'fail') + '">';
+        html += '<h3>Telegram API</h3>';
+        if (tg.ok) html += '<p>✅ ' + tg.message + '</p>';
+        else html += '<p>❌ ' + tg.error + '</p>';
         html += '</div>';
 
         html += '<div class="status-card ' + (wh.ok ? (wh.is_set ? 'ok' : 'warn') : 'fail') + '">';
