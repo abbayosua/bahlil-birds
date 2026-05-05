@@ -71,6 +71,12 @@ function runMigration() {
                 $pdo->exec($stmt);
             }
         }
+        // Upgrade existing databases: add columns from newer schema versions
+        $check = $pdo->query("SHOW COLUMNS FROM rewards WHERE Field = 'pending_coins'");
+        if ($check->rowCount() === 0) {
+            $pdo->exec('ALTER TABLE rewards ADD COLUMN pending_coins INT NOT NULL DEFAULT 0 AFTER claimed_coins');
+        }
+        try { $pdo->exec('ALTER TABLE rewards DROP COLUMN total_coins'); } catch (PDOException $e) {}
         return ['ok' => true, 'message' => 'Migration completed successfully'];
     } catch (PDOException $e) { return ['ok' => false, 'error' => 'Migration failed: ' . $e->getMessage()]; }
 }

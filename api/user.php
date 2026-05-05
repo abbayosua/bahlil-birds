@@ -20,7 +20,7 @@ switch ($action) {
             jsonResponse(['user' => $user, 'exists' => true]);
         }
         $userId = $db->lastInsertId();
-        $db->prepare('INSERT INTO rewards (user_id, total_coins, claimed_coins) VALUES (?, 0, 0)')->execute([$userId]);
+        $db->prepare('INSERT INTO rewards (user_id, claimed_coins, pending_coins) VALUES (?, 0, 0)')->execute([$userId]);
         $stmt = $db->prepare('SELECT id, username, telegram_id, created_at FROM users WHERE id = ?');
         $stmt->execute([$userId]);
         jsonResponse(['user' => $stmt->fetch(), 'created' => true]);
@@ -38,7 +38,7 @@ switch ($action) {
         if (!$user) {
             jsonResponse(['error' => 'User not found'], 404);
         }
-        $stmt = $db->prepare('SELECT total_coins, claimed_coins FROM rewards WHERE user_id = ?');
+        $stmt = $db->prepare('SELECT pending_coins, claimed_coins FROM rewards WHERE user_id = ?');
         $stmt->execute([$user['id']]);
         $rewards = $stmt->fetch();
         jsonResponse(['user' => $user, 'rewards' => $rewards]);
