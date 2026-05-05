@@ -105,6 +105,21 @@ function setWebhook($webhookUrl) {
         : ['ok' => false, 'error' => $data['description'] ?? 'Unknown error'];
 }
 
+function testTelegramConnection(): array {
+    $ch = curl_init('https://api.telegram.org/bot' . BOT_TOKEN . '/getMe');
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8]);
+    $r = curl_exec($ch);
+    $errno = curl_errno($ch);
+    $error = curl_error($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($errno) return ['ok' => false, 'error' => "cURL error ($errno): $error. Your hosting may block outbound connections to Telegram."];
+    if ($httpCode !== 200) return ['ok' => false, 'error' => "Telegram API returned HTTP $httpCode. Check your bot token."];
+    $data = json_decode($r, true);
+    $botName = $data['result']['username'] ?? 'unknown';
+    return ['ok' => true, 'message' => "Connected to @$botName ✅"];
+}
+
 if (!($_SESSION['admin_logged_in'] ?? false)) {
     header('Location: index.php'); exit;
 }
@@ -116,8 +131,9 @@ if ($action) {
         case 'step_status':
             $dbStatus = testDb();
             $whStatus = checkWebhook();
+            $tgStatus = testTelegramConnection();
             $configExists = file_exists(__DIR__ . '/../config/db.php');
-            echo json_encode(['ok' => true, 'config_exists' => $configExists, 'db' => $dbStatus, 'webhook' => $whStatus]);
+            echo json_encode(['ok' => true, 'config_exists' => $configExists, 'db' => $dbStatus, 'webhook' => $whStatus, 'telegram' => $tgStatus]);
             exit;
         case 'save_config':
             echo json_encode(saveConfig($_POST['db_host'] ?? 'localhost', $_POST['db_name'] ?? 'flappybird', $_POST['db_user'] ?? 'root', $_POST['db_pass'] ?? ''));
@@ -133,6 +149,9 @@ if ($action) {
             } catch (PDOException $e) {
                 echo json_encode(['ok' => false, 'error' => 'Connection failed: ' . $e->getMessage()]);
             }
+            exit;
+        case 'test_telegram':
+            echo json_encode(testTelegramConnection());
             exit;
         case 'migrate':
             echo json_encode(runMigration());
@@ -199,9 +218,10 @@ if ($action) {
 
     <div class="progress">
         <div class="step" id="prog-1">1. Credentials</div>
-        <div class="step" id="prog-2">2. Migration</div>
-        <div class="step" id="prog-3">3. Webhook</div>
-        <div class="step" id="prog-4">4. Done</div>
+        <div class="step" id="prog-2">2. Connectivity</div>
+        <div class="step" id="prog-3">3. Migration</div>
+        <div class="step" id="prog-4">4. Webhook</div>
+        <div class="step" id="prog-5">5. Done</div>
     </div>
 
     <div class="wizard-step" id="step-1">
@@ -222,28 +242,39 @@ if ($action) {
 
     <div class="wizard-step" id="step-2">
         <div class="step-box">
-            <h2>Step 2: Database Migration</h2>
-            <p>Creates the database tables (<code>users</code>, <code>scores</code>, <code>rewards</code>).</p>
-            <div id="migrate-status" class="status"><p class="loading">Checking...</p></div>
-            <button id="btn-migrate" onclick="runMigrate()">Run Migration</button>
-            <p id="migrate-msg" class="msg"></p>
+            <h2>Step 2: Telegram Connectivity</h2>
+            <p>Check if your server can reach the Telegram API. Some hosting providers block outbound connections.</p>
+            <div id="tg-status" class="status"><p class="loading">Testing...</p></div>
+            <button id="btn-test-tg" onclick="testTelegram()">📡 Test Connectivity</button>
+            <p id="tg-msg" class="msg"></p>
             <button class="secondary" onclick="goBack(1)">← Back to Credentials</button>
         </div>
     </div>
 
     <div class="wizard-step" id="step-3">
         <div class="step-box">
-            <h2>Step 3: Telegram Webhook</h2>
+            <h2>Step 3: Database Migration</h2>
+            <p>Creates the database tables (<code>users</code>, <code>scores</code>, <code>rewards</code>).</p>
+            <div id="migrate-status" class="status"><p class="loading">Checking...</p></div>
+            <button id="btn-migrate" onclick="runMigrate()">Run Migration</button>
+            <p id="migrate-msg" class="msg"></p>
+            <button class="secondary" onclick="goBack(2)">← Back to Connectivity</button>
+        </div>
+    </div>
+
+    <div class="wizard-step" id="step-4">
+        <div class="step-box">
+            <h2>Step 4: Telegram Webhook</h2>
             <p>Register the Telegram bot webhook so the bot can receive messages.</p>
             <div id="wh-status" class="status"><p class="loading">Checking...</p></div>
             <input type="url" id="webhook-url" placeholder="https://yourdomain.com/bikinweb/flappybird/api/telegram.php" style="width:100%;padding:10px 14px;border:2px solid #0f3460;border-radius:8px;background:#1a1a2e;color:#fff;font-size:0.95em;outline:none;margin-bottom:12px;">
             <button onclick="registerWebhook()">Register Webhook</button>
             <p id="wh-msg" class="msg"></p>
-            <button class="secondary" onclick="goBack(2)">← Back to Migration</button>
+            <button class="secondary" onclick="goBack(3)">← Back to Migration</button>
         </div>
     </div>
 
-    <div class="wizard-step" id="step-4">
+    <div class="wizard-step" id="step-5">
         <div class="step-box wizard-done">
             <h2>✅ All Done!</h2>
             <p>Bahlil Birds is fully set up and ready to go.</p>
@@ -270,7 +301,7 @@ function goToStep(n) {
     document.querySelectorAll('.wizard-step').forEach(s => s.classList.remove('active'));
     document.getElementById('step-' + n).classList.add('active');
     document.querySelectorAll('.progress .step').forEach(s => s.classList.remove('active'));
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 5; i++) {
         const el = document.getElementById('prog-' + i);
         el.classList.remove('active', 'done');
         if (i < n) el.classList.add('done');
@@ -290,10 +321,19 @@ async function checkStatus() {
         return;
     }
 
-    if (!d.db.ok) {
+    if (!d.telegram.ok) {
         goToStep(2);
+        document.getElementById('tg-status').innerHTML = '<p class="fail">❌ ' + d.telegram.error + '</p>';
+        document.getElementById('btn-test-tg').disabled = false;
+        return;
+    }
+
+    document.getElementById('prog-2').classList.add('done');
+
+    if (!d.db.ok) {
+        goToStep(3);
         if (d.db.step === 'connection') {
-            document.getElementById('migrate-status').innerHTML = '<p>❌ Cannot connect — check credentials in Step 1</p>';
+            document.getElementById('migrate-status').innerHTML = '<p class="fail">❌ Cannot connect — check credentials in Step 1</p>';
         } else if (d.db.step === 'db') {
             document.getElementById('migrate-status').innerHTML = '<p class="info">Database does not exist yet — click "Run Migration" to create it.</p>';
             document.getElementById('btn-migrate').disabled = false;
@@ -301,20 +341,20 @@ async function checkStatus() {
             document.getElementById('migrate-status').innerHTML = '<p class="info">Database exists but tables are missing — click "Run Migration".</p>';
             document.getElementById('btn-migrate').disabled = false;
         } else {
-            document.getElementById('migrate-status').innerHTML = '<p>❌ ' + d.db.error + '</p>';
+            document.getElementById('migrate-status').innerHTML = '<p class="fail">❌ ' + d.db.error + '</p>';
         }
         return;
     }
 
-    // DB ready, check webhook
-    document.getElementById('prog-2').classList.add('done');
+    document.getElementById('prog-3').classList.add('done');
+
     if (d.webhook.ok && d.webhook.is_set) {
-        goToStep(4);
+        goToStep(5);
     } else if (d.webhook.ok) {
-        goToStep(3);
+        goToStep(4);
         document.getElementById('wh-status').innerHTML = '<p class="info">Webhook not set yet — enter your URL below.</p>';
     } else {
-        goToStep(3);
+        goToStep(4);
         document.getElementById('wh-status').innerHTML = '<p class="info">' + d.webhook.error + '</p>';
     }
 }
@@ -366,7 +406,7 @@ async function runMigrate() {
         el.textContent = '✅ ' + d.message;
         document.getElementById('migrate-status').innerHTML = '<p>✅ Database is ready!</p>';
         btn.textContent = 'Done';
-        goToStep(3);
+        goToStep(4);
         checkStatus();
     } else {
         el.className = 'msg err';
@@ -385,10 +425,32 @@ async function registerWebhook() {
         el.className = 'msg ok';
         el.textContent = '✅ ' + d.message;
         document.getElementById('wh-status').innerHTML = '<p>✅ Webhook active!</p>';
-        goToStep(4);
+        goToStep(5);
     } else {
         el.className = 'msg err';
         el.textContent = '❌ ' + d.error;
+    }
+}
+
+async function testTelegram() {
+    const btn = document.getElementById('btn-test-tg');
+    btn.disabled = true;
+    btn.textContent = 'Testing...';
+    const d = await api('test_telegram');
+    const el = document.getElementById('tg-msg');
+    if (d.ok) {
+        el.className = 'msg ok';
+        el.textContent = '✅ ' + d.message;
+        document.getElementById('tg-status').innerHTML = '<p>✅ Telegram API is reachable!</p>';
+        btn.disabled = true;
+        btn.textContent = '✅ Connected';
+        setTimeout(() => { goToStep(3); checkStatus(); }, 1000);
+    } else {
+        el.className = 'msg err';
+        el.textContent = '❌ ' + d.error;
+        document.getElementById('tg-status').innerHTML = '<p class="fail">❌ ' + d.error + '</p>';
+        btn.disabled = false;
+        btn.textContent = '📡 Retry Test';
     }
 }
 
