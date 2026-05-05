@@ -160,6 +160,8 @@ function handleAction($action) {
             $wh = $_POST['webhook_url'] ?? '';
             if (empty($wh)) return ['ok' => false, 'error' => 'Webhook URL required'];
             return setWebhook($wh);
+        case 'test_telegram':
+            return testTelegramConnection();
         default:
             return ['ok' => false, 'error' => 'Unknown action'];
     }
@@ -269,10 +271,11 @@ if (isLoggedIn() && !testDb()['ok']) {
         else html += '<p>❌ ' + db.error + '</p>';
         html += '</div>';
 
-        html += '<div class="status-card ' + (tg.ok ? 'ok' : 'fail') + '">';
+        html += '<div class="status-card ' + (tg.ok ? 'ok' : 'fail') + '" id="tg-card">';
         html += '<h3>Telegram API</h3>';
-        if (tg.ok) html += '<p>✅ ' + tg.message + '</p>';
-        else html += '<p>❌ ' + tg.error + '</p>';
+        html += '<p id="tg-status">' + (tg.ok ? '✅ ' + tg.message : '❌ ' + tg.error) + '</p>';
+        html += '<button onclick="testTelegramPing()" class="test-btn">📡 Test Connectivity</button>';
+        html += '<span id="tg-ping-msg" class="msg" style="font-size:0.9em"></span>';
         html += '</div>';
 
         html += '<div class="status-card ' + (wh.ok ? (wh.is_set ? 'ok' : 'warn') : 'fail') + '">';
@@ -295,6 +298,32 @@ if (isLoggedIn() && !testDb()['ok']) {
         const d = await api('status');
         if (d.ok) document.getElementById('status-cards').innerHTML = statusHtml(d);
         else document.getElementById('status-cards').innerHTML = '<p class="error">Failed to get status</p>';
+    }
+
+    async function testTelegramPing() {
+        const btn = document.querySelector('#tg-card .test-btn');
+        const msg = document.getElementById('tg-ping-msg');
+        const status = document.getElementById('tg-status');
+        btn.disabled = true;
+        btn.textContent = 'Testing...';
+        msg.textContent = '';
+        status.innerHTML = '⏳ Testing connection...';
+        document.getElementById('tg-card').className = 'status-card';
+        const d = await api('test_telegram');
+        if (d.ok) {
+            status.innerHTML = '✅ ' + d.message;
+            document.getElementById('tg-card').className = 'status-card ok';
+            msg.className = 'msg ok';
+            msg.textContent = '✅ Ping successful';
+            btn.textContent = '📡 Test Connectivity';
+        } else {
+            status.innerHTML = '❌ ' + d.error;
+            document.getElementById('tg-card').className = 'status-card fail';
+            msg.className = 'msg err';
+            msg.textContent = '❌ Ping failed';
+            btn.textContent = '📡 Retry';
+        }
+        btn.disabled = false;
     }
 
     document.querySelectorAll('.tab').forEach(t => {

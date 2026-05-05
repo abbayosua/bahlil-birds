@@ -236,3 +236,34 @@ body {
 .warn, .msg.warn { color: #f39c12; }
 .msg { margin-top: 12px; font-size: 0.9em; }
 .loading { color: #888; }
+
+.status-card {
+    position: relative;
+}
+
+.test-btn {
+    margin-top: 10px;
+    padding: 6px 14px;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+    background: transparent;
+    color: #4dc9f6;
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.test-btn:hover {
+    background: #0f3460;
+    color: #fff;
+}
+
+.test-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.status-card .msg {
+    display: inline;
+    margin-left: 8px;
+}
